@@ -21,27 +21,33 @@ typedef struct {
 } UsbMouseEvent;
 
 bool btn_left_autofire = false;
-uint32_t autofire_delay = 10;
+uint32_t autofire_delay = 1200;
+uint32_t autofire_rand = 200;
+uint32_t autofire_click_delay = 0;
 
 static void usb_hid_autofire_render_callback(Canvas* canvas, void* ctx) {
     UNUSED(ctx);
     char autofire_delay_str[12];
+    char autofire_rand_str[12];
     //std::string pi = "pi is " + std::to_string(3.1415926);
     itoa(autofire_delay, autofire_delay_str, 10);
+    itoa(autofire_rand, autofire_rand_str, 10);
     //sprintf(autofire_delay_str, "%lu", autofire_delay);
 
     canvas_clear(canvas);
 
-    canvas_set_font(canvas, FontPrimary);
+    canvas_set_font(canvas, FontSecondary);
     canvas_draw_str(canvas, 0, 10, "USB HID Autofire");
-    canvas_draw_str(canvas, 0, 34, btn_left_autofire ? "<active>" : "<inactive>");
+    canvas_draw_str(canvas, 0, 32, btn_left_autofire ? "<active>" : "<inactive>");
 
     canvas_set_font(canvas, FontSecondary);
     canvas_draw_str(canvas, 90, 10, "v");
     canvas_draw_str(canvas, 96, 10, VERSION);
-    canvas_draw_str(canvas, 0, 22, "Press [ok] for auto left clicking");
-    canvas_draw_str(canvas, 0, 46, "delay [ms]:");
-    canvas_draw_str(canvas, 50, 46, autofire_delay_str);
+    canvas_draw_str(canvas, 0, 22, "Press [ok] to start");
+    canvas_draw_str(canvas, 0, 41, "delay [ms]:");
+    canvas_draw_str(canvas, 50, 41, autofire_delay_str);
+    canvas_draw_str(canvas, 0, 51, "rand [ms]:");
+    canvas_draw_str(canvas, 50, 51, autofire_rand_str);
     canvas_draw_str(canvas, 0, 63, "Press [back] to exit");
 }
 
@@ -83,7 +89,7 @@ int32_t usb_hid_autofire_app(void* p) {
                     break;
                 }
 
-                if(event.input.type != InputTypeRelease) {
+                if(event.input.type != InputTypeRelease && event.input.type != InputTypeRepeat) {
                     continue;
                 }
 
@@ -99,6 +105,14 @@ int32_t usb_hid_autofire_app(void* p) {
                     case InputKeyRight:
                         autofire_delay += 10;
                         break;
+                    case InputKeyDown:
+                        if(autofire_rand > 0) {
+                            autofire_rand -= 10;
+                        }
+                        break;
+                    case InputKeyUp:
+                        autofire_rand += 10;
+                        break;
                     default:
                         break;
                 }
@@ -108,9 +122,14 @@ int32_t usb_hid_autofire_app(void* p) {
         if(btn_left_autofire) {
             furi_hal_hid_mouse_press(HID_MOUSE_BTN_LEFT);
             // TODO: Don't wait, but use the timer directly to just don't send the release event (see furi_hal_cortex_delay_us)
-            furi_delay_us(autofire_delay * 500);
+            autofire_click_delay = (abs((int)furi_hal_random_get()) % 50) + 50;
+            furi_delay_ms(autofire_click_delay);
             furi_hal_hid_mouse_release(HID_MOUSE_BTN_LEFT);
-            furi_delay_us(autofire_delay * 500);
+            if(autofire_rand > 0) {
+                furi_delay_ms((autofire_delay) + (abs((int)furi_hal_random_get()) % autofire_rand) - autofire_click_delay - 50);
+            } else {
+                furi_delay_ms(autofire_delay - autofire_click_delay - 50);
+            }
         }
 
         view_port_update(view_port);
